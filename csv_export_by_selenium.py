@@ -3,6 +3,7 @@ import time
 import os
 import re
 import argparse
+import shutil
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 from selenium import webdriver
@@ -24,7 +25,7 @@ def get_args():
 
     args = parser.parse_args()
     args.filename = args.filename or 'results_by_selenium.csv'
-    args.uri = args.uri or 'file:///opt/python/static/gnavi_list_01.html'
+    args.uri = args.uri or 'file:///opt/python/static/html/gnavi_list_01.html'
     args.shops = args.shops or 50
     args.timeout = args.timeout or 90
     args.retry = args.retry or 3
@@ -174,6 +175,8 @@ def main():
     # 初期化
     if (os.path.isfile(args['filename'])):
         os.remove(args['filename'])
+    if (args['uri'].startswith('file:///opt/python/static/html/')):
+        shutil.unpack_archive('static/html.zip', 'static/html')
 
     service = Service(executable_path='/usr/bin/chromedriver')
     options = webdriver.ChromeOptions()
@@ -194,6 +197,9 @@ def main():
     print('INFO ', datetime.now(JST), 'CSVファイルを出力します')
     shop_details.to_csv(args['filename'], encoding="utf-8_sig", index=False)
     print('INFO ', datetime.now(JST), 'CSVファイルを出力しました')
+
+    if os.path.isdir('static/html'):
+        shutil.rmtree('static/html')
 
     driver.close()
     driver.quit()
