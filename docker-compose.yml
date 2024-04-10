@@ -1,0 +1,36 @@
+version: '3.9'
+services:
+  mysql:
+    image: mysql:8.0.36
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=1
+      - MYSQL_ROOT_PASSWORD=
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_bin, --default-storage-engine=innodb, --max_allowed_packet=32505856, --innodb_use_native_aio=0, --log_error_verbosity=1]
+    volumes:
+      - db-data:/var/lib/mysql
+    ports:
+      - 3306:3306
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  python:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/python/Dockerfile
+      args:
+        - UID=${DOCKER_UID:-1000}
+        - GID=${DOCKER_GID:-1000}
+        - USERNAME=${DOCKER_USERNAME:-dev}
+    working_dir: '/opt/python'
+    tty: true
+    volumes:
+      - .:/opt/python
+    depends_on:
+      mysql:
+        condition: service_healthy
+volumes:
+  db-data:
