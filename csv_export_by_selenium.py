@@ -17,15 +17,14 @@ JST = timezone(timedelta(hours=+9), 'JST')
 
 def get_args():
     parser = argparse.ArgumentParser(description='Usage')
-    parser.add_argument('--filename', help='output csv filename (default: results_by_selenium.csv)', type=str)
-    parser.add_argument('--uri', help='gnavi url (default: static files)', type=str)
+    parser.add_argument('--uri', help="gnavi url (If using static files, specify 'file:///opt/python/static/html/gnavi_list_01.html')", required=True, type=str)
+    parser.add_argument('--filename', help='output csv filename (default: results.csv)', type=str)
     parser.add_argument('--shops', help='Maximum number of shops acquired (default: 50)', type=int)
     parser.add_argument('--timeout', help='Timeout time to find the element (seconds) (default: 90)', type=int)
     parser.add_argument('--retry', help='Number of retries (default: 3)', type=int)
 
     args = parser.parse_args()
-    args.filename = args.filename or 'results_by_selenium.csv'
-    args.uri = args.uri or 'file:///opt/python/static/html/gnavi_list_01.html'
+    args.filename = args.filename or 'results.csv'
     args.shops = args.shops or 50
     args.timeout = args.timeout or 90
     args.retry = args.retry or 3
