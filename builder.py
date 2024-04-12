@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
@@ -8,8 +9,12 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from requests_file import FileAdapter
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.service import Service
@@ -46,30 +51,7 @@ class Shop:
 class CsvBuilder:
     TIMEZONE = timezone(timedelta(hours=+9), 'JST')
 
-    @abstractmethod
-    def build(self) -> CsvBuilder:
-        pass
-
-    @abstractmethod
-    def write_csv(self) -> CsvBuilder:
-        pass
-
-class CsvBuilderFactory:
-    @staticmethod
-    def create_csv_builder(**kwargs):
-        lib = kwargs['lib']
-        if lib == 'requests':
-            # TODO:
-            raise ValueError(f'Unknown lib: {lib}')
-        elif lib == 'selenium':
-            return SeleniumCsvBuilder(**kwargs)
-        else:
-            raise ValueError(f'Unknown type: {lib}')
-
-class SeleniumCsvBuilder(CsvBuilder):
     def __init__(self, **kwargs):
-        self.driver = None
-        self.wait = None
         self.shops = []
 
         self.filename = kwargs['filename']
@@ -77,6 +59,35 @@ class SeleniumCsvBuilder(CsvBuilder):
         self.limit = kwargs['shops']
         self.timeout = kwargs['timeout']
         self.retry = kwargs['retry']
+
+    @abstractmethod
+    def build(self) -> CsvBuilder:
+        pass
+
+    def write_csv(self) -> CsvBuilder:
+        print('INFO ', datetime.now(self.TIMEZONE), 'CSVファイルを出力します')
+        rows = [shop.to_list() for shop in self.shops]
+        df = pd.DataFrame(rows, columns=['店舗名', '電話番号', 'メールアドレス', '都道府県', '市区町村', '番地', '建物名', 'URL', 'SSL'])
+        df.to_csv(self.filename, encoding="utf-8_sig", index=False)
+        print('INFO ', datetime.now(self.TIMEZONE), 'CSVファイルを出力しました')
+        return self
+
+class CsvBuilderFactory:
+    @staticmethod
+    def create_csv_builder(**kwargs):
+        lib = kwargs['lib']
+        if lib == 'requests':
+            return RequestsCsvBuilder(**kwargs)
+        elif lib == 'selenium':
+            return SeleniumCsvBuilder(**kwargs)
+        else:
+            raise ValueError(f'Unknown type: {lib}')
+
+class RequestsCsvBuilder(CsvBuilder):
+    USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     # Override
     def build(self) -> CsvBuilder:
@@ -88,13 +99,132 @@ class SeleniumCsvBuilder(CsvBuilder):
         self.__tearDown()
         return self
 
+    def __setUp(self):
+        if (os.path.isfile(self.filename)):
+            os.remove(self.filename)
+        if (self.uri.startswith('file:///opt/python/static/html/')):
+            shutil.unpack_archive('static/html.zip', 'static/html')
+
+    def __beautiful_soup_instance(self, url, page=None):
+        session = requests.Session()
+        if self.uri.startswith('http'):
+            target_url = f'{url}&p={page}' if page else url
+            res = session.get(target_url, headers={'User-Agent': self.USER_AGENT})
+            return BeautifulSoup(res.content, 'html.parser')
+
+        parsed_url = urlparse(url)
+        original_filename = os.path.basename(parsed_url.path)
+        filename, file_extension = os.path.splitext(original_filename)
+        if page:
+            filename = filename.split('_')[0] + '_' + filename.split('_')[1] + '_' + str(page).zfill(2) + file_extension
+            target_url = url.replace(original_filename, filename)
+        else:
+            target_url =  url
+
+        session.mount('file://', FileAdapter())
+        res = session.get(target_url, headers={'User-Agent': self.USER_AGENT})
+        f = open(target_url.replace('file://', ''), 'r')
+        soup = BeautifulSoup(f, 'html.parser')
+        f.close()
+        return soup
+
+    def __set_gn_url_of_shops(self):
+        print('INFO ', datetime.now(self.TIMEZONE), f'検索結果の上位{self.limit}件のURLを取得します')
+        page = 1
+        max_page = math.ceil(self.limit / 20)  # 1ページあたり20件
+        while page <= max_page:
+            soup = self.__beautiful_soup_instance(self.uri, page)
+            shop_elems = soup.select('article > div.style_title___HrjW > a.style_titleLink__oiHVJ')
+            if not shop_elems:
+                break
+            for elem in shop_elems:
+                self.shops.append(Shop(gn_url=elem.get('href')))
+                if len(self.shops) >= self.limit:
+                    print('INFO ', datetime.now(self.TIMEZONE), f'検索結果の上位{self.limit}件のURLを取得しました')
+                    return
+
+            page += 1
+            time.sleep(3)
+
+        print('INFO ', datetime.now(self.TIMEZONE), f'検索結果の上位{self.limit}件のURLを取得しました')
+
+    def __set_shop_details(self):
+        print('INFO ', datetime.now(self.TIMEZONE), '店舗詳細を取得します')
+
+        limit = len(self.shops)
+        for i, shop in enumerate(self.shops):
+
+            soup = self.__beautiful_soup_instance(shop.gn_url)
+            # 店舗名
+            shop.name = soup.select_one('#info-name').get_text(strip=True).replace(u'\xa0', u' ')
+            print('DEBUG', datetime.now(self.TIMEZONE), f'{str(i + 1).rjust(len(str(limit)))}/{limit}', shop.name, shop.gn_url)
+            # 電話番号
+            shop.tel = soup.select_one('#info-phone > td > ul > li:nth-child(1) > span.number').get_text(strip=True)
+            # メールアドレス
+            try:
+                shop.email = soup.select_one('#info-table > table > tbody a[href^=mailto]').get('href').replace('mailto:', '')
+            except AttributeError:
+                pass
+            # 住所
+            address = soup.select_one('#info-table > table > tbody p.adr > span.region').get_text(strip=True)
+            shop.parse_address(address)
+            # 建物名
+            try:
+                shop.building = soup.select_one('#info-table > table > tbody p.adr > span.locality').get_text(strip=True)
+            except AttributeError:
+                pass
+            # URL
+            ## 「お店のホームページ」リンクからURL取得を試みる
+            try:
+                shop_url_elem = soup.select_one('#info-table > table > tbody a.url')
+                if shop_url_elem:
+                    shop_url_json = shop_url_elem.get('data-o')
+                    if shop_url_json:
+                        shop_url_info = json.loads(shop_url_json)
+                        # SSLエラーを検知するためhttps固定にする(shop_url_info['b']にschemaが定義されている)
+                        shop.official_url = f"https://{shop_url_info['a']}"
+                        time.sleep(0.5)
+                        requests.get(shop.official_url, headers={'User-Agent': self.USER_AGENT})
+            except requests.exceptions.SSLError:
+                shop.official_url = shop.official_url.replace('https://', 'http://')
+            except requests.exceptions.ConnectionError:
+                pass
+
+            ## 「お店のホームページ」リンクからURLを取得できなかった場合、「オフィシャルページ」アイコンからURL取得を試みる
+            if not shop.official_url:
+                try:
+                    shop_url_elem = soup.select_one('#sv-site > li > a')
+                    if shop_url_elem:
+                        shop.official_url = shop_url_elem.get('href')
+                        time.sleep(0.5)
+                        requests.get(shop.official_url, headers={'User-Agent': self.USER_AGENT})
+                except requests.exceptions.SSLError:
+                    shop.official_url = shop.official_url.replace('https://', 'http://')
+                except requests.exceptions.ConnectionError:
+                    pass
+
+            time.sleep(3)
+
+        print('INFO ', datetime.now(self.TIMEZONE), '店舗詳細を取得しました')
+
+    def __tearDown(self):
+        if os.path.isdir('static/html'):
+            shutil.rmtree('static/html')
+
+class SeleniumCsvBuilder(CsvBuilder):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.driver = None
+        self.wait = None
+
     # Override
-    def write_csv(self) -> CsvBuilder:
-        print('INFO ', datetime.now(self.TIMEZONE), 'CSVファイルを出力します')
-        rows = [shop.to_list() for shop in self.shops]
-        df = pd.DataFrame(rows, columns=['店舗名', '電話番号', 'メールアドレス', '都道府県', '市区町村', '番地', '建物名', 'URL', 'SSL'])
-        df.to_csv(self.filename, encoding="utf-8_sig", index=False)
-        print('INFO ', datetime.now(self.TIMEZONE), 'CSVファイルを出力しました')
+    def build(self) -> CsvBuilder:
+        self.__setUp()
+
+        self.__set_gn_url_of_shops()
+        self.__set_shop_details()
+
+        self.__tearDown()
         return self
 
     def __setUp(self):
