@@ -10,6 +10,7 @@ RUN groupadd -g ${GID} ${USERNAME} \
 RUN apt-get update -y && \
     apt-get upgrade -y && \
     apt-get install -y \
+    git \
     vim \
     python3-dev \
     default-mysql-client \
