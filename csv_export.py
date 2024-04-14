@@ -1,9 +1,26 @@
+"""
+Script to export Csv.
+
+Usage
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --uri URI             gnavi url (default: 'file:///opt/python/static/html/gnavi_list_01.html')
+  --lib {requests,selenium}
+                        use requests or selenium library (default: requests)
+  --filename FILENAME   output csv filename (default: results.csv)
+  --shops SHOPS         Maximum number of shops acquired (default: 50, max: 50)
+  --timeout TIMEOUT     Timeout time to find the element (seconds) (default: 90)
+  --retry RETRY         Number of retries (default: 3)
+"""
+
 import argparse
 
-from builder import CsvBuilderFactory
+from csv_creator import CsvCreatorFactory
 
 
 def get_args():
+    """Return Arguments."""
     parser = argparse.ArgumentParser(description='Usage')
     parser.add_argument('--uri', help="gnavi url (default: 'file:///opt/python/static/html/gnavi_list_01.html')", type=str)
     parser.add_argument('--lib', help='use requests or selenium library (default: requests)', choices=['requests', 'selenium'])
@@ -23,10 +40,11 @@ def get_args():
     args.retry = args.retry or 3
     return vars(args)
 
+
 # ==============================
 # メイン処理
 # ==============================
-args = get_args()
+arguments = get_args()
 
-builder = CsvBuilderFactory().create_csv_builder(**args)
-builder.build().write_csv()
+creator = CsvCreatorFactory().create_csv_creator(**arguments)
+creator.create()
