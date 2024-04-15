@@ -44,7 +44,11 @@ def get_args():
 # ==============================
 # メイン処理
 # ==============================
-arguments = get_args()
+def main():
+  arguments = get_args()
 
-creator = CsvCreatorFactory().create_csv_creator(**arguments)
-creator.create()
+  creator = CsvCreatorFactory().create_csv_creator(**arguments)
+  creator.create()
+
+if __name__ == '__main__':
+  main()
