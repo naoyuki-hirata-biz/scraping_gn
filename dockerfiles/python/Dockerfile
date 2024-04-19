@@ -25,7 +25,7 @@ WORKDIR /opt/python
 
 USER ${UID}
 
-ENV PATH $PATH:/home/dev/.local/bin
+ENV PATH $PATH:/home/${USERNAME}/.local/bin
 
 RUN echo 'alias ll="ls -la"' >> ~/.bashrc
 
