@@ -119,7 +119,7 @@ class RequestsCsvCreator(CsvCreator):
 
         session.mount('file://', FileAdapter())
         res = session.get(target_url, headers={'User-Agent': self.USER_AGENT})
-        with open(target_url.replace('file://', ''), mode='r', encoding='utf-8') as file:
+        with open(target_url.replace('file://', ''), mode='r', encoding='utf_8_sig') as file:
             return BeautifulSoup(file, 'html.parser')
 
     # Override
@@ -136,7 +136,7 @@ class RequestsCsvCreator(CsvCreator):
             if not shop_urls:
                 break
             if shop_count == 1:
-                with open(self.filename, 'w', encoding='utf-8', newline='') as file:
+                with open(self.filename, 'w', encoding='utf_8_sig', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(self.CSV_HEADER)
 
@@ -205,7 +205,7 @@ class RequestsCsvCreator(CsvCreator):
 
                 row.append(official_url)
                 row.append(str(official_url.startswith('https')))
-                with open(self.filename, 'a', encoding='utf-8', newline='') as file:
+                with open(self.filename, 'a', encoding='utf_8_sig', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(row)
                 if shop_count >= self.limit:
@@ -264,7 +264,7 @@ class SeleniumCsvCreator(CsvCreator):
             if not shop_urls:
                 break
             if shop_count == 1:
-                with open(self.filename, 'w', encoding='utf-8', newline='') as file:
+                with open(self.filename, 'w', encoding='utf_8_sig', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(self.CSV_HEADER)
 
@@ -313,7 +313,7 @@ class SeleniumCsvCreator(CsvCreator):
                 row.append(str(official_url.startswith('https')))
                 self.driver.close()
                 self.driver.switch_to.window(self.driver.window_handles[0])
-                with open(self.filename, 'a', encoding='utf-8', newline='') as file:
+                with open(self.filename, 'a', encoding='utf_8_sig', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(row)
                 if shop_count >= self.limit:
